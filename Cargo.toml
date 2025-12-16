@@ -1,0 +1,30 @@
+cargo-features = ["edition2024"]
+
+[package]
+name = "UniPinoNft"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+bpf-entrypoint = []
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# parser for proc-macro
+proc-macro2 = "1"
+syn = { version = "2.0", features = ["extra-traits"] }
+quote = "1.0"
+
+# pinocchio toolset
+pinocchio = "0.9.2"
+pinocchio-system = "0.4.0"
+pinocchio-pubkey = "0.3.0"
+pinocchio-log = "0.5.1"
+
+# IDL generator
+shank = "0.4.6"
+
+# nft metaplex
+# mpl-core = "0.11.1"
