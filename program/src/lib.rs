@@ -5,23 +5,16 @@ extern crate alloc;
 
 mod error;
 mod instructions;
-mod state {
-    pub mod platform_state;
-}
+mod state;
 
 #[cfg(feature = "bpf-entrypoint")]
 mod entrypoint {
     use pinocchio::{
-        entrypoint,
-        account_info::AccountInfo,
-        program_error::ProgramError,
+        ProgramResult, account_info::AccountInfo, entrypoint, program_error::ProgramError,
         pubkey::Pubkey,
-        ProgramResult
     };
 
-    use crate::instructions::{
-        platform_management::*
-    };
+    use crate::instructions::platform_management::*;
 
     use pinocchio_pubkey::declare_id;
 

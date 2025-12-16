@@ -3,55 +3,33 @@ extern crate alloc;
 
 /******* The following marco is copy from anchor repo ********
 ******** and made it compatible with no_std *******************/
-use alloc::{
-    borrow::ToOwned,
-    collections::VecDeque,
-    string::ToString,
-};
+use alloc::{borrow::ToOwned, collections::VecDeque, string::ToString};
 use proc_macro::TokenStream;
-use proc_macro2::{
-    Ident,
-    TokenStream as TokenStream2,
-    TokenTree,
-};
-use quote::{
-    quote,
-    quote_spanned,
-    ToTokens,
-};
+use proc_macro2::{Ident, TokenStream as TokenStream2, TokenTree};
+use quote::{ToTokens, quote, quote_spanned};
 use syn::{
-    parse::ParseStream,
-    parse2,
-    parse_macro_input,
-    punctuated::Punctuated,
-    token::Comma,
-    Attribute,
-    DeriveInput,
-    Field,
-    Fields,
-    GenericArgument,
-    LitInt,
-    PathArguments,
-    Type,
-    TypeArray,
+    Attribute, DeriveInput, Field, Fields, GenericArgument, LitInt, PathArguments, Type, TypeArray,
+    parse::ParseStream, parse_macro_input, parse2, punctuated::Punctuated, token::Comma,
 };
 
 // source code copy from anchor
-#[proc_macro_derive(InitSpace, attributes(max_len))]
+#[proc_macro_derive(InitSpace, attributes(max_len, space_trait))]
 pub fn derive_init_space(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let name = input.ident;
 
+    let space_trait = get_space_trait_path(&input.attrs);
+
     let process_struct_fields = |fields: Punctuated<Field, Comma>| {
         let recurse = fields.into_iter().map(|f| {
             let mut max_len_args = get_max_len_args(&f.attrs);
-            len_from_type(f.ty, &mut max_len_args)
+            len_from_type(f.ty, &mut max_len_args, &space_trait)
         });
 
         quote! {
             #[automatically_derived]
-            impl #impl_generics anchor_lang::Space for #name #ty_generics #where_clause {
+            impl #impl_generics #space_trait for #name #ty_generics #where_clause {
                 const INIT_SPACE: usize = 0 #(+ #recurse)*;
             }
         }
@@ -63,7 +41,7 @@ pub fn derive_init_space(item: TokenStream) -> TokenStream {
             Fields::Unnamed(unnamed) => process_struct_fields(unnamed.unnamed),
             Fields::Unit => quote! {
                 #[automatically_derived]
-                impl #impl_generics anchor_lang::Space for #name #ty_generics #where_clause {
+                impl #impl_generics #space_trait for #name #ty_generics #where_clause {
                     const INIT_SPACE: usize = 0;
                 }
             },
@@ -72,7 +50,7 @@ pub fn derive_init_space(item: TokenStream) -> TokenStream {
             let variants = enm.variants.into_iter().map(|v| {
                 let len = v.fields.into_iter().map(|f| {
                     let mut max_len_args = get_max_len_args(&f.attrs);
-                    len_from_type(f.ty, &mut max_len_args)
+                    len_from_type(f.ty, &mut max_len_args, &space_trait)
                 });
 
                 quote! {
@@ -84,7 +62,7 @@ pub fn derive_init_space(item: TokenStream) -> TokenStream {
 
             quote! {
                 #[automatically_derived]
-                impl anchor_lang::Space for #name {
+                impl #space_trait for #name {
                     const INIT_SPACE: usize = 1 + #max;
                 }
             }
@@ -98,7 +76,7 @@ pub fn derive_init_space(item: TokenStream) -> TokenStream {
 fn gen_max<T: Iterator<Item = TokenStream2>>(mut iter: T) -> TokenStream2 {
     if let Some(item) = iter.next() {
         let next_item = gen_max(iter);
-        quote!(anchor_lang::__private::max(#item, #next_item))
+        quote!([#item, #next_item][(#item < #next_item) as usize])
     } else {
         quote!(0)
     }
@@ -128,11 +106,15 @@ fn parse_len_arg(item: ParseStream) -> Result<VecDeque<TokenStream2>, syn::Error
     Ok(result)
 }
 
-fn len_from_type(ty: Type, attrs: &mut Option<VecDeque<TokenStream2>>) -> TokenStream2 {
+fn len_from_type(
+    ty: Type,
+    attrs: &mut Option<VecDeque<TokenStream2>>,
+    space_trait: &TokenStream2,
+) -> TokenStream2 {
     match ty {
         Type::Array(TypeArray { elem, len, .. }) => {
             let array_len = len.to_token_stream();
-            let type_len = len_from_type(*elem, attrs);
+            let type_len = len_from_type(*elem, attrs, space_trait);
             quote!((#array_len * #type_len))
         }
         Type::Path(ty_path) => {
@@ -154,7 +136,7 @@ fn len_from_type(ty: Type, attrs: &mut Option<VecDeque<TokenStream2>>) -> TokenS
                 "Pubkey" => quote!(32),
                 "Option" => {
                     if let Some(ty) = first_ty {
-                        let type_len = len_from_type(ty, attrs);
+                        let type_len = len_from_type(ty, attrs, space_trait);
 
                         quote!((1 + #type_len))
                     } else {
@@ -164,7 +146,7 @@ fn len_from_type(ty: Type, attrs: &mut Option<VecDeque<TokenStream2>>) -> TokenS
                 "Vec" => {
                     if let Some(ty) = first_ty {
                         let max_len = get_next_arg(ident, attrs);
-                        let type_len = len_from_type(ty, attrs);
+                        let type_len = len_from_type(ty, attrs, space_trait);
 
                         quote!((4 + #type_len * #max_len))
                     } else {
@@ -173,7 +155,7 @@ fn len_from_type(ty: Type, attrs: &mut Option<VecDeque<TokenStream2>>) -> TokenS
                 }
                 _ => {
                     let ty = &ty_path.path;
-                    quote!(<#ty as anchor_lang::Space>::INIT_SPACE)
+                    quote!(<#ty as #space_trait>::INIT_SPACE)
                 }
             }
         }
@@ -181,7 +163,7 @@ fn len_from_type(ty: Type, attrs: &mut Option<VecDeque<TokenStream2>>) -> TokenS
             let recurse = ty_tuple
                 .elems
                 .iter()
-                .map(|t| len_from_type(t.clone(), attrs));
+                .map(|t| len_from_type(t.clone(), attrs, space_trait));
             quote! {
                 (0 #(+ #recurse)*)
             }
@@ -210,4 +192,13 @@ fn get_next_arg(ident: &Ident, args: &mut Option<VecDeque<TokenStream2>>) -> Tok
     } else {
         quote_spanned!(ident.span() => compile_error!("Expected max_len attribute."))
     }
+}
+
+fn get_space_trait_path(attributes: &[Attribute]) -> TokenStream2 {
+    attributes
+        .iter()
+        .find(|a| a.path().is_ident("space_path"))
+        .and_then(|a| a.parse_args::<syn::Path>().ok())
+        .map(|path| quote!(#path))
+        .unwrap_or_else(|| quote!(Space)) // 默认值
 }

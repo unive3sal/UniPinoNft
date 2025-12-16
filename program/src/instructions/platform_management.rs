@@ -1,13 +1,13 @@
+use pinocchio::ProgramResult;
 use pinocchio::account_info::AccountInfo;
 use pinocchio::instruction::{Seed, Signer};
 use pinocchio::program_error::ProgramError;
 use pinocchio::pubkey::try_find_program_address;
-use pinocchio::ProgramResult;
 
 use pinocchio_log::log;
 
-use crate::error::UniPinoNftErr;
 use super::*;
+use crate::error::UniPinoNftErr;
 
 pub struct InitPlatform<'a> {
     pub authority: &'a AccountInfo,
@@ -25,14 +25,16 @@ impl<'a> InitPlatform<'a> {
 
         // authority is the administration wallet which is configured by server backend
         if !authority.is_signer() {
-            log!("[ERROR] address {} is not the correct signer", authority.key());
+            log!(
+                "[ERROR] address {} is not the correct signer",
+                authority.key()
+            );
             return Err(ProgramError::InvalidAccountOwner);
         }
 
-        let (pda, bump) = try_find_program_address(
-            &[b"administer", authority.key().as_ref()],
-            &ID
-        ).ok_or(UniPinoNftErr::PdaErr).map_err(|e| ProgramError::from(e))?;
+        let (pda, bump) = try_find_program_address(&[b"administer", authority.key().as_ref()], &ID)
+            .ok_or(UniPinoNftErr::PdaErr)
+            .map_err(|e| ProgramError::from(e))?;
 
         if pda != platform_pda.key().as_ref() {
             return Err(ProgramError::InvalidSeeds);
@@ -56,7 +58,7 @@ impl<'a> InitPlatform<'a> {
 
 impl<'a> TryFrom<&'a [AccountInfo]> for InitPlatform<'a> {
     type Error = ProgramError;
-    
+
     fn try_from(accounts: &'a [AccountInfo]) -> Result<Self, Self::Error> {
         if accounts.len() < 2 {
             log!("[Error] accounts len: {}", accounts.len());
@@ -72,4 +74,3 @@ impl<'a> TryFrom<&'a [AccountInfo]> for InitPlatform<'a> {
         })
     }
 }
-

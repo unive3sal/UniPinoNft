@@ -7,8 +7,9 @@ pub enum UniPinoNftErr {
 
 impl pinocchio::program_error::ToStr for UniPinoNftErr {
     fn to_str<E>(&self) -> &'static str
-        where
-            E: 'static + pinocchio::program_error::ToStr + TryFrom<u32> {
+    where
+        E: 'static + pinocchio::program_error::ToStr + TryFrom<u32>,
+    {
         match self {
             Self::PdaErr => "Fail to find PDA",
             Self::ReInitPda => "Instruction try to re-init exist PDA",
