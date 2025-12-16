@@ -1,6 +1,8 @@
 use pinocchio::pubkey::Pubkey;
+use utils::InitSpace;
 
 #[repr(C)]
+#[derive(InitSpace)]
 pub struct PlatformState {
     pub discriminator: [u8; 8],
     pub authority: Pubkey,  // this PDA should also be owned by authority

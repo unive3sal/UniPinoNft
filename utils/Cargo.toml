@@ -1,0 +1,14 @@
+[package]
+name = "utils"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# parser for proc-macro
+proc-macro2 = "1"
+syn = { version = "2.0", features = ["extra-traits"] }
+quote = "1.0"
+
