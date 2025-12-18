@@ -5,7 +5,9 @@ extern crate alloc;
 
 mod error;
 mod instructions;
-mod state;
+mod state {
+    pub mod platform_state;
+}
 
 #[cfg(feature = "bpf-entrypoint")]
 mod entrypoint {

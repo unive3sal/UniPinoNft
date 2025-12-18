@@ -1,5 +1,7 @@
 pub mod platform_management;
 
+use bytemuck::{Pod, PodInOption, Zeroable, ZeroableInOption};
+use pinocchio::pubkey::Pubkey;
 use pinocchio_pubkey::declare_id;
 use shank::ShankInstruction;
 
@@ -16,12 +18,25 @@ pub enum UniPinoNftInstruction {
     )]
     #[account(
         1,
-        name = "plateform PDA",
-        desc = "account for on-chain plateform management"
+        name = "platform PDA",
+        desc = "account for on-chain platform management"
     )]
     #[account(2, name = "system_program")]
     InitPlatform,
 
+    #[account(
+        0,
+        signer,
+        writable,
+        name = "authority account",
+        desc = "update platform"
+    )]
+    #[account(
+        1,
+        name = "platform PDA",
+        desc = "account for on-chain platform management"
+    )]
+    #[account(2, name = "system_program")]
     UpdatePlatform,
 
     #[account(
@@ -35,8 +50,8 @@ pub enum UniPinoNftInstruction {
     #[account(
         2,
         writable,
-        name = "plateform PDA",
-        desc = "account for on-chain plateform management"
+        name = "platform PDA",
+        desc = "account for on-chain platform management"
     )]
     #[account(3, name = "system_program")]
     CreateUserWallet {
@@ -57,4 +72,11 @@ pub enum UniPinoNftInstruction {
     CreateAuction,
     PlaceBid,
     SettleAuction,
+}
+
+#[repr(C, packed)]
+#[derive(Pod, Zeroable)]
+pub struct UpdatePlatformArgs {
+    pub fee_receiver: PodInOption<Pubkey>,
+    pub mint_fee: u64,
 }

@@ -1,3 +1,6 @@
+use bytemuck::bytes_of;
+use pinocchio::sysvars::rent::Rent;
+use pinocchio::sysvars::Sysvar;
 use pinocchio::ProgramResult;
 use pinocchio::account_info::AccountInfo;
 use pinocchio::instruction::{Seed, Signer};
@@ -5,13 +8,20 @@ use pinocchio::program_error::ProgramError;
 use pinocchio::pubkey::try_find_program_address;
 
 use pinocchio_log::log;
+use pinocchio_system::instructions::CreateAccount;
 
 use super::*;
 use crate::error::UniPinoNftErr;
+use crate::state::platform_state::PlatformState;
 
 pub struct InitPlatform<'a> {
-    pub authority: &'a AccountInfo,
-    pub platform_pda: &'a AccountInfo,
+    authority: &'a AccountInfo,
+    platform_pda: &'a AccountInfo,
+}
+
+pub struct UpdatePlatformConfig<'a> {
+    authority: &'a AccountInfo,
+    platform_pda: &'a AccountInfo,
 }
 
 impl<'a> InitPlatform<'a> {
@@ -51,6 +61,28 @@ impl<'a> InitPlatform<'a> {
         ];
         let signer = Signer::from(&signer_seeds);
 
+        // calculate rents
+        let min_lamports = Rent::get()?.minimum_balance(PlatformState::INIT_SPACE);
+        log!("Init platform PDA requires min balance: {}", min_lamports);
+
+        CreateAccount {
+            from: &authority,
+            to: &platform_pda,
+            lamports: min_lamports,
+            space: PlatformState::INIT_SPACE as u64,
+            owner: &ID,
+        }
+        .invoke_signed(&[signer])?;
+
+        // fill data field in PDA
+        let platform_init_state = PlatformState::new(*authority.key(), *authority.key(), bump);
+        platform_pda.try_borrow_mut_data()?
+            .copy_from_slice(bytes_of(&platform_init_state));
+
+        if platform_pda.try_borrow_data()?[0..8] != platform_init_state.discriminator {
+            return Err(ProgramError::from(UniPinoNftErr::InitPlatformPdaErr));
+        }
+
         log!("platform pda created");
         Ok(())
     }
@@ -73,4 +105,16 @@ impl<'a> TryFrom<&'a [AccountInfo]> for InitPlatform<'a> {
             platform_pda: platform_pda,
         })
     }
+}
+
+impl<'a> UpdatePlatformConfig<'a> {
+    pub const DISCRIMINATOR: &'a u8 = &1;
+    
+    fn process(self) -> ProgramResult {
+        
+    }
+}
+
+impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for UpdatePlatformConfig {
+    
 }

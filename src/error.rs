@@ -3,6 +3,7 @@ use pinocchio::program_error::ProgramError;
 pub enum UniPinoNftErr {
     PdaErr,
     ReInitPda,
+    InitPlatformPdaErr,
 }
 
 impl pinocchio::program_error::ToStr for UniPinoNftErr {
@@ -13,6 +14,7 @@ impl pinocchio::program_error::ToStr for UniPinoNftErr {
         match self {
             Self::PdaErr => "Fail to find PDA",
             Self::ReInitPda => "Instruction try to re-init exist PDA",
+            Self::InitPlatformPdaErr => "Failed to init platform PDA",
         }
     }
 }
