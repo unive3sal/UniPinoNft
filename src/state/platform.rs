@@ -3,7 +3,7 @@ use pinocchio::pubkey::Pubkey;
 
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable)]
-pub struct PlatformState {
+pub struct Platform {
     pub discriminator: [u8; 8],
     pub authority: Pubkey, // this PDA should also be owned by authority
     pub fee_receiver: Pubkey,
@@ -14,7 +14,7 @@ pub struct PlatformState {
     pub reserved: [u8; 128],
 }
 
-impl PlatformState {
+impl Platform {
     pub const DISCRIMINATOR: [u8; 8] = *b"platform";
     pub const INIT_SPACE: usize = core::mem::size_of::<Self>();
 

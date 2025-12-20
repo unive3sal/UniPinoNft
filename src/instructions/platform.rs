@@ -4,7 +4,7 @@ use pinocchio::ProgramResult;
 use pinocchio::account_info::AccountInfo;
 use pinocchio::instruction::{Seed, Signer};
 use pinocchio::program_error::ProgramError;
-use pinocchio::pubkey::{PUBKEY_BYTES, try_find_program_address};
+use pinocchio::pubkey::try_find_program_address;
 use pinocchio::sysvars::Sysvar;
 use pinocchio::sysvars::rent::Rent;
 
@@ -13,7 +13,7 @@ use pinocchio_system::instructions::CreateAccount;
 
 use super::*;
 use crate::error::UniPinoNftErr;
-use crate::state::platform_state::PlatformState;
+use crate::state::platform::Platform;
 
 const PLATFORM_TOKEN: &[u8] = b"administer";
 
@@ -56,35 +56,30 @@ impl<'a> InitPlatform<'a> {
         }
 
         let signer_seeds = [
-            Seed::from(b"administer".as_slice()),
+            Seed::from(PLATFORM_TOKEN),
             Seed::from(self.authority.key().as_ref()),
             Seed::from(core::slice::from_ref(&bump)),
         ];
         let signer = Signer::from(&signer_seeds);
 
         // calculate rents
-        let min_lamports = Rent::get()?.minimum_balance(PlatformState::INIT_SPACE);
+        let min_lamports = Rent::get()?.minimum_balance(Platform::INIT_SPACE);
         log!("Init platform PDA requires min balance: {}", min_lamports);
 
         CreateAccount {
             from: &self.authority,
             to: &self.platform_pda,
             lamports: min_lamports,
-            space: PlatformState::INIT_SPACE as u64,
+            space: Platform::INIT_SPACE as u64,
             owner: &ID,
         }
         .invoke_signed(&[signer])?;
 
         // fill data field in PDA
-        let platform_init_state =
-            PlatformState::new(*self.authority.key(), *self.authority.key(), bump);
+        let platform_init_state = Platform::new(*self.authority.key(), *self.authority.key(), bump);
         self.platform_pda
             .try_borrow_mut_data()?
             .copy_from_slice(bytes_of(&platform_init_state));
-
-        if self.platform_pda.try_borrow_data()?[0..8] != platform_init_state.discriminator {
-            return Err(ProgramError::from(UniPinoNftErr::InitPlatformPdaErr));
-        }
 
         log!("platform pda created");
         Ok(())
@@ -135,7 +130,7 @@ impl<'a> UpdatePlatformConfig<'a> {
             .platform_pda
             .try_borrow_mut_data()
             .map_err(|_| ProgramError::from(UniPinoNftErr::PlatformPdaUninit))?;
-        let platform_state = try_from_bytes_mut::<PlatformState>(platform_data_bytes.as_mut())
+        let platform_state = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
             .map_err(|_| ProgramError::from(UniPinoNftErr::PlatformPdaUninit))?;
 
         let (pda, bump) =
