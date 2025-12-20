@@ -19,7 +19,8 @@ pinocchio-log = "0.5.1"
 # IDL generator
 shank = "0.4.6"
 
-bytemuck = { version = "1.24.0", features = ["derive"] }
+bytemuck = { version = "1.24.0", features = ["derive", "min_const_generics"] }
 
 # nft metaplex
+borsh = { version = "1.6.0", default-features = false, features = ["derive"] }
 # mpl-core = "0.11.1"

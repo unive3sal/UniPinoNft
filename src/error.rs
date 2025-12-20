@@ -4,6 +4,8 @@ pub enum UniPinoNftErr {
     PdaErr,
     ReInitPda,
     InitPlatformPdaErr,
+    PlatformPdaUninit,
+    UserPdaExisted,
 }
 
 impl pinocchio::program_error::ToStr for UniPinoNftErr {
@@ -15,6 +17,8 @@ impl pinocchio::program_error::ToStr for UniPinoNftErr {
             Self::PdaErr => "Fail to find PDA",
             Self::ReInitPda => "Instruction try to re-init exist PDA",
             Self::InitPlatformPdaErr => "Failed to init platform PDA",
+            Self::PlatformPdaUninit => "Platform is still inactive",
+            Self::UserPdaExisted => "User wallet PDA already existed",
         }
     }
 }

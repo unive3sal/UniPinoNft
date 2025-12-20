@@ -16,7 +16,7 @@ mod entrypoint {
         pubkey::Pubkey,
     };
 
-    use crate::instructions::platform_management::*;
+    use crate::instructions::platform::*;
 
     use pinocchio_pubkey::declare_id;
 
@@ -31,6 +31,9 @@ mod entrypoint {
     ) -> ProgramResult {
         match instruction_data.split_first() {
             Some((InitPlatform::DISCRIMINATOR, _)) => InitPlatform::try_from(accounts)?.process(),
+            Some((UpdatePlatformConfig::DISCRIMINATOR, data)) => {
+                UpdatePlatformConfig::try_from((accounts, data))?.process()
+            }
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }
