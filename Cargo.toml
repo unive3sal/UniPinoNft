@@ -14,13 +14,18 @@ bpf-entrypoint = []
 pinocchio = "0.9.2"
 pinocchio-system = "0.4.0"
 pinocchio-pubkey = "0.3.0"
+pinocchio-token-2022 = "0.1.0"
 pinocchio-log = "0.5.1"
 
-# IDL generator
-shank = "0.4.6"
-
+thiserror = { version = "2", default-features = false }
+num-traits = { version = "0.2", default-features = false }
+num-derive = { version = "0.4.2", default-features = false }
 bytemuck = { version = "1.24.0", features = ["derive", "min_const_generics"] }
 
-# nft metaplex
-borsh = { version = "1.6.0", default-features = false, features = ["derive"] }
-# mpl-core = "0.11.1"
+# IDL generator
+shank = { version = "0.4.6", default-features = false }
+
+
+[dev-dependencies]
+# test
+litesvm = "0.8.2"

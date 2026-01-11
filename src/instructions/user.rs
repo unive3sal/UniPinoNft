@@ -16,30 +16,37 @@ use crate::state::user::User;
 
 use super::*;
 
-const USER_TOKEN: &[u8] = b"user_wallet";
+pub const USER_TOKEN: &[u8] = b"user_wallet";
 
 pub struct CreateUser<'a> {
-    pub authority: &'a AccountInfo,
+    pub administrator: &'a AccountInfo,
     pub platform_pda: &'a AccountInfo,
     pub user_pda: &'a AccountInfo,
-    pub user_uuid: u128,
+    pub user_uuid: &'a u128,
 }
 
 impl<'a> CreateUser<'a> {
     pub const DISCRIMINATOR: &'a u8 = &2;
-    pub const ACCOUNT_NUM: usize = 3;
 
     pub fn process(self) -> ProgramResult {
-        if self.authority.is_signer() || self.platform_pda.is_signer() {
-            return Err(ProgramError::InvalidAccountOwner);
+        if self.administrator.is_signer() {
+            return Err(ProgramError::MissingRequiredSignature);
         }
 
         if self.platform_pda.is_owned_by(&ID) || self.platform_pda.lamports() == 0 {
-            return Err(ProgramError::from(UniPinoNftErr::PlatformPdaUninit));
+            return Err(UniPinoNftErr::UninitPda.into());
+        }
+
+        let mut platform_data_bytes = self.platform_pda.try_borrow_mut_data()?;
+        let platform_state = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
+            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+
+        if platform_state.administrator != self.administrator.key().as_ref() {
+            return Err(ProgramError::InvalidAccountOwner);
         }
 
         if self.user_pda.lamports() > 0 {
-            return Err(ProgramError::from(UniPinoNftErr::UserPdaExisted));
+            return Err(UniPinoNftErr::ReInitPda.into());
         }
 
         let (user_pda, user_bump) = try_find_program_address(
@@ -47,11 +54,11 @@ impl<'a> CreateUser<'a> {
                 USER_TOKEN,
                 self.user_uuid.to_string().as_bytes(),
                 self.platform_pda.key().as_ref(),
+                core::slice::from_ref(&platform_state.bump),
             ],
             &ID,
         )
-        .ok_or(UniPinoNftErr::PdaErr)
-        .map_err(|e| ProgramError::from(e))?;
+        .ok_or(UniPinoNftErr::PdaErr)?;
 
         if user_pda != self.user_pda.key().as_ref() {
             return Err(ProgramError::InvalidSeeds);
@@ -60,34 +67,34 @@ impl<'a> CreateUser<'a> {
         let min_lamports = Rent::get()?.minimum_balance(User::INIT_SPACE);
         log!("Init user PDA requires min balance: {}", min_lamports);
 
-        let signer_seeds = [
+        let platform_seeds = [
+            Seed::from(platform::PLATFORM_TOKEN),
+            Seed::from(self.administrator.key().as_ref()),
+            Seed::from(core::slice::from_ref(&platform_state.bump)),
+        ];
+        let platform_signer = Signer::from(&platform_seeds);
+
+        let user_seeds = [
             Seed::from(USER_TOKEN),
-            Seed::from(self.authority.key().as_ref()),
             Seed::from(self.platform_pda.key().as_ref()),
             Seed::from(core::slice::from_ref(&user_bump)),
         ];
+        let user_signer = Signer::from(&user_seeds);
 
-        let signer = Signer::from(&signer_seeds);
         CreateAccount {
-            from: &self.authority,
+            from: &self.administrator,
             to: &self.user_pda,
             lamports: min_lamports,
             space: User::INIT_SPACE as u64,
             owner: &ID,
         }
-        .invoke_signed(&[signer])?;
+        .invoke_signed(&[platform_signer, user_signer])?;
 
-        let user_meta = User::new(*self.platform_pda.key(), self.user_uuid, user_bump);
+        let user_meta = User::new(*self.platform_pda.key(), *self.user_uuid, user_bump);
         self.user_pda
             .try_borrow_mut_data()?
             .copy_from_slice(bytes_of(&user_meta));
 
-        let mut platform_data_bytes = self
-            .platform_pda
-            .try_borrow_mut_data()
-            .map_err(|_| ProgramError::InvalidAccountData)?;
-        let platform_state = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
         platform_state.total_users = platform_state
             .total_users
             .checked_add(1)
@@ -103,14 +110,10 @@ impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for CreateUser<'a> {
 
     fn try_from(value: (&'a [AccountInfo], &'a [u8])) -> Result<Self, Self::Error> {
         let (accounts, instruction_data) = value;
-        if accounts.len() < Self::ACCOUNT_NUM {
-            log!(
-                "[Error] input accounts len: {}, require: {}",
-                accounts.len(),
-                Self::ACCOUNT_NUM
-            );
+
+        let [administrator, platform_pda, user_pda, _] = accounts else {
             return Err(ProgramError::NotEnoughAccountKeys);
-        }
+        };
 
         if instruction_data.len() != size_of::<u128>() {
             return Err(ProgramError::InvalidInstructionData);
@@ -120,10 +123,10 @@ impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for CreateUser<'a> {
             .map_err(|_| ProgramError::InvalidInstructionData)?;
 
         Ok(Self {
-            authority: &accounts[0],
-            platform_pda: &accounts[1],
-            user_wallet_pda: &accounts[2],
-            user_uuid: *user_uuid,
+            administrator: administrator,
+            platform_pda: platform_pda,
+            user_pda: user_pda,
+            user_uuid: user_uuid,
         })
     }
 }

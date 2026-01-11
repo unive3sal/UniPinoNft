@@ -5,7 +5,7 @@ use pinocchio::pubkey::Pubkey;
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Platform {
     pub discriminator: [u8; 8],
-    pub authority: Pubkey, // this PDA should also be owned by authority
+    pub administrator: Pubkey, // this PDA should also be owned by authority
     pub fee_receiver: Pubkey,
     pub total_users: u64,
     pub total_mints: u64,
@@ -18,11 +18,11 @@ impl Platform {
     pub const DISCRIMINATOR: [u8; 8] = *b"platform";
     pub const INIT_SPACE: usize = core::mem::size_of::<Self>();
 
-    pub fn new(authority: Pubkey, fee_receiver: Pubkey, bump: u8) -> Self {
+    pub fn new(authority: Pubkey, bump: u8) -> Self {
         Self {
             discriminator: Self::DISCRIMINATOR,
-            authority: authority,
-            fee_receiver: fee_receiver,
+            administrator: authority,
+            fee_receiver: authority,
             total_users: 0,
             total_mints: 0,
             mint_fee: 0,

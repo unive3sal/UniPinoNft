@@ -1,3 +1,4 @@
+pub mod nft;
 pub mod platform;
 pub mod user;
 
@@ -8,6 +9,7 @@ use shank::ShankInstruction;
 
 declare_id!("6jpuWYTM3ARc5CHrMBtR1c7gyjkMTsJoYT7PqqhMpRWh");
 
+#[allow(dead_code)]
 #[derive(ShankInstruction)]
 pub enum UniPinoNftInstruction {
     #[account(
@@ -52,7 +54,6 @@ pub enum UniPinoNftInstruction {
     )]
     #[account(
         1,
-        signer,
         writable,
         name = "platform PDA",
         desc = "account for on-chain platform management"
@@ -62,7 +63,6 @@ pub enum UniPinoNftInstruction {
     CreateUser {
         user_uuid: u128,
     },
-
     /* TODO
     ActivateUserWallet,
     DeactivateUserWallet,
@@ -76,13 +76,14 @@ pub enum UniPinoNftInstruction {
     )]
     #[account(
         1,
-        signer,
         writable,
         name = "platform PDA",
         desc = "account for on-chain platform management"
     )]
-    #[account(2, signer, writable, name = "user PDA")]
-    #[account(3, name = "system_program")]
+    #[account(2, writable, name = "user PDA")]
+    #[account(3, writable, name = "mint PDA")]
+    #[account(4, writable, name = "metadata PDA")]
+    #[account(5, name = "system_program")]
     MintNft {
         minNftArgs: MintNftArgs,
     },
@@ -102,9 +103,9 @@ pub enum UniPinoNftInstruction {
 #[repr(C, packed)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct UpdatePlatformArgs {
+    pub mint_fee: u64,
     pub is_receiver_valid: u8,
     pub fee_receiver: Pubkey,
-    pub mint_fee: u64,
 }
 
 #[repr(C, packed)]
@@ -112,5 +113,6 @@ pub struct UpdatePlatformArgs {
 pub struct MintNftArgs {
     user_uuid: u128,
     asset_name: [u8; 256],
+    desc: [u8; 256],
     uri: [u8; 256],
 }

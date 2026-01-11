@@ -6,6 +6,7 @@ extern crate alloc;
 mod error;
 mod instructions;
 mod state {
+    pub mod nft_meta;
     pub mod platform;
     pub mod user;
 }
@@ -17,7 +18,7 @@ mod entrypoint {
         pubkey::Pubkey,
     };
 
-    use crate::instructions::platform::*;
+    use crate::instructions::{nft::*, platform::*, user::*};
 
     use pinocchio_pubkey::declare_id;
 
@@ -35,6 +36,10 @@ mod entrypoint {
             Some((UpdatePlatformConfig::DISCRIMINATOR, data)) => {
                 UpdatePlatformConfig::try_from((accounts, data))?.process()
             }
+            Some((CreateUser::DISCRIMINATOR, data)) => {
+                CreateUser::try_from((accounts, data))?.process()
+            }
+            Some((MintNft::DISCRIMINATOR, data)) => MintNft::try_from((accounts, data))?.process(),
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }

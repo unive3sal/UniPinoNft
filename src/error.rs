@@ -1,26 +1,26 @@
-use pinocchio::program_error::ProgramError;
+use num_derive::FromPrimitive;
+use pinocchio::program_error::{ProgramError, ToStr};
+use thiserror::Error;
 
+#[derive(Clone, Debug, PartialEq, Eq, Error, FromPrimitive)]
 pub enum UniPinoNftErr {
+    #[error("Fail to find a valid PDA")]
     PdaErr,
+    #[error("Instruction try to access uninit PDA")]
+    UninitPda,
+    #[error("Instruction try to re-init exist PDA")]
     ReInitPda,
-    InitPlatformPdaErr,
-    PlatformPdaUninit,
-    UserPdaExisted,
-    CreatUserPdaErr,
 }
 
-impl pinocchio::program_error::ToStr for UniPinoNftErr {
+impl ToStr for UniPinoNftErr {
     fn to_str<E>(&self) -> &'static str
     where
-        E: 'static + pinocchio::program_error::ToStr + TryFrom<u32>,
+        E: 'static + ToStr + TryFrom<u32>,
     {
         match self {
-            Self::PdaErr => "Fail to find PDA",
-            Self::ReInitPda => "Instruction try to re-init exist PDA",
-            Self::InitPlatformPdaErr => "Failed to init platform PDA data",
-            Self::PlatformPdaUninit => "Platform is still inactive",
-            Self::UserPdaExisted => "User wallet PDA already existed",
-            Self::CreatUserPdaErr => "Failed to init User PDA data",
+            Self::PdaErr => "ERROR: Fail to find a valid PDA",
+            Self::UninitPda => "ERROR: Instruction try to re-init exist PDA",
+            Self::ReInitPda => "ERROR: Instruction try to re-init exist PDA",
         }
     }
 }
