@@ -85,9 +85,47 @@ pub enum UniPinoNftInstruction {
     #[account(4, writable, name = "metadata PDA")]
     #[account(5, name = "system_program")]
     MintNft {
-        minNftArgs: MintNftArgs,
+        mint_nft_args: MintNftArgs,
     },
-    UpdateNFTMetadata,
+
+    #[account(
+        0,
+        signer,
+        writable,
+        name = "authority account",
+        desc = "init account, and it is responsible for paying gas and NFT rent"
+    )]
+    #[account(
+        1,
+        writable,
+        name = "platform PDA",
+        desc = "account for on-chain platform management"
+    )]
+    #[account(2, writable, name = "user PDA")]
+    #[account(3, writable, name = "mint PDA")]
+    #[account(4, writable, name = "metadata PDA")]
+    #[account(5, name = "system_program")]
+    UpdateNFTMetadata {
+        nft_meta: NftMeta,
+    },
+
+    #[account(
+        0,
+        signer,
+        writable,
+        name = "authority account",
+        desc = "init account, and it is responsible for paying gas and NFT rent"
+    )]
+    #[account(
+        1,
+        writable,
+        name = "platform PDA",
+        desc = "account for on-chain platform management"
+    )]
+    #[account(2, writable, name = "user PDA")]
+    #[account(3, writable, name = "mint PDA")]
+    #[account(4, writable, name = "metadata PDA")]
+    #[account(5, name = "system_program")]
     BurnNFT,
 
     TransferNFTInternal,
@@ -115,4 +153,13 @@ pub struct MintNftArgs {
     asset_name: [u8; 256],
     desc: [u8; 256],
     uri: [u8; 256],
+}
+
+#[repr(C, packed)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub struct NftMeta {
+    pub name: [u8; 256],
+    pub collection: [u8; 64],
+    pub uri: [u8; 256],
+    pub description: [u8; 256],
 }

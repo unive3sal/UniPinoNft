@@ -40,6 +40,10 @@ mod entrypoint {
                 CreateUser::try_from((accounts, data))?.process()
             }
             Some((MintNft::DISCRIMINATOR, data)) => MintNft::try_from((accounts, data))?.process(),
+            Some((UpdateNFTMetadata::DISCRIMINATOR, data)) => {
+                UpdateNFTMetadata::try_from((accounts, data))?.process()
+            }
+            Some((BurnNft::DISCRIMINATOR, _)) => BurnNft::try_from(accounts)?.process(),
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }

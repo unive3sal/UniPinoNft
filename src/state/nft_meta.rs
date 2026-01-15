@@ -3,6 +3,7 @@ use bytemuck::{Pod, Zeroable};
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct NftMeta {
+    pub discriminator: [u8; 8],
     pub name: [u8; 256],
     pub collection: [u8; 64],
     pub uri: [u8; 256],

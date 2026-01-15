@@ -17,14 +17,14 @@ impl User {
     pub const DISCRIMINATOR: [u8; 8] = *b"usermeta";
     pub const INIT_SPACE: usize = core::mem::size_of::<Self>();
 
-    pub fn new(owner: Pubkey, user_uuid: u128, bump: u8) -> Self {
+    pub fn new(platform_pda: Pubkey, user_uuid: u128, user_bump: u8) -> Self {
         Self {
             discriminator: Self::DISCRIMINATOR,
             user_uuid: user_uuid,
-            owner: owner,
+            owner: platform_pda,
             nft_count: 0,
             collection_count: 0,
-            bump: bump,
+            bump: user_bump,
             reserved: [0; 64],
         }
     }

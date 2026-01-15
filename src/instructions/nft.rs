@@ -143,6 +143,7 @@ impl<'a> MintNft<'a> {
             .invoke_signed(&[platform_signer, user_signer, mint_signer])?;
         }
         let metadata = NftMeta {
+            discriminator: NftMeta::DISCRIMINATOR,
             name: self.mint_nft_args.asset_name,
             collection: [0; 64],
             uri: self.mint_nft_args.uri,
@@ -151,6 +152,16 @@ impl<'a> MintNft<'a> {
         self.metadata_pda
             .try_borrow_mut_data()?
             .copy_from_slice(bytes_of(&metadata));
+
+        // update mint count
+        platform.total_mints = platform
+            .total_mints
+            .checked_add(1)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        user.nft_count = user
+            .nft_count
+            .checked_add(1)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
 
         log!("mint nft success");
         Ok(())
@@ -189,6 +200,211 @@ impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for MintNft<'a> {
             mint_pda: mint_pda,
             metadata_pda: metadata_pda,
             mint_nft_args: mint_nft_args,
+        })
+    }
+}
+
+pub struct UpdateNFTMetadata<'a> {
+    pub administrator: &'a AccountInfo,
+    pub platform_pda: &'a AccountInfo,
+    pub user_pda: &'a AccountInfo,
+    pub mint_pda: &'a AccountInfo,
+    pub metadata_pda: &'a AccountInfo,
+    pub nft_meta: &'a super::NftMeta,
+}
+
+impl<'a> UpdateNFTMetadata<'a> {
+    pub const DISCRIMINATOR: &'a u8 = &4;
+
+    pub fn process(self) -> ProgramResult {
+        if !self.administrator.is_signer() {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        if !self.platform_pda.is_owned_by(&ID)
+            || !self.user_pda.is_owned_by(&ID)
+            || !self.metadata_pda.is_owned_by(&ID)
+            || self.platform_pda.lamports() == 0
+            || self.user_pda.lamports() == 0
+            || self.metadata_pda.lamports() == 0
+        {
+            return Err(UniPinoNftErr::UninitPda.into());
+        }
+
+        let platform_data_bytes = self.platform_pda.try_borrow_data()?;
+        let platform = try_from_bytes::<Platform>(platform_data_bytes.as_ref())
+            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+
+        let user_data_bytes = self.user_pda.try_borrow_data()?;
+        let user = try_from_bytes::<User>(user_data_bytes.as_ref())
+            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+
+        if platform.administrator != self.administrator.key().as_ref()
+            || user.owner != self.platform_pda.key().as_ref()
+        {
+            return Err(ProgramError::InvalidAccountOwner);
+        }
+
+        let metadata_pda_seeds = [b"metadata", self.mint_pda.key().as_ref(), &TOKEN_2022_ID];
+        let (metadata_pda, _) = try_find_program_address(&metadata_pda_seeds, &TOKEN_2022_ID)
+            .ok_or(UniPinoNftErr::PdaErr)?;
+
+        if metadata_pda != self.metadata_pda.key().as_ref() {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        let updated_metadata = NftMeta {
+            discriminator: NftMeta::DISCRIMINATOR,
+            name: self.nft_meta.name,
+            collection: self.nft_meta.collection,
+            uri: self.nft_meta.uri,
+            description: self.nft_meta.description,
+        };
+        self.metadata_pda
+            .try_borrow_mut_data()?
+            .copy_from_slice(bytes_of(&updated_metadata));
+
+        log!("nft metadata updated");
+        Ok(())
+    }
+}
+
+impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for UpdateNFTMetadata<'a> {
+    type Error = ProgramError;
+
+    fn try_from(value: (&'a [AccountInfo], &'a [u8])) -> Result<Self, Self::Error> {
+        let (accounts, instruction_data) = value;
+
+        let [
+            administrator,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            _,
+        ] = accounts
+        else {
+            return Err(ProgramError::NotEnoughAccountKeys);
+        };
+
+        if instruction_data.len() != size_of::<super::NftMeta>() {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+
+        let nft_meta = try_from_bytes::<super::NftMeta>(instruction_data)
+            .map_err(|_| ProgramError::InvalidInstructionData)?;
+
+        Ok(Self {
+            administrator,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            nft_meta,
+        })
+    }
+}
+
+pub struct BurnNft<'a> {
+    pub administrator: &'a AccountInfo,
+    pub platform_pda: &'a AccountInfo,
+    pub user_pda: &'a AccountInfo,
+    pub mint_pda: &'a AccountInfo,
+    pub metadata_pda: &'a AccountInfo,
+}
+
+impl<'a> BurnNft<'a> {
+    pub const DISCRIMINATOR: &'a u8 = &5;
+
+    pub fn process(self) -> ProgramResult {
+        if !self.administrator.is_signer() {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        if !self.platform_pda.is_owned_by(&ID)
+            || !self.user_pda.is_owned_by(&ID)
+            || !self.metadata_pda.is_owned_by(&ID)
+            || self.platform_pda.lamports() == 0
+            || self.user_pda.lamports() == 0
+            || self.metadata_pda.lamports() == 0
+        {
+            return Err(UniPinoNftErr::UninitPda.into());
+        }
+
+        let mut platform_data_bytes = self.platform_pda.try_borrow_mut_data()?;
+        let platform = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
+            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+
+        let mut user_data_bytes = self.user_pda.try_borrow_mut_data()?;
+        let user = try_from_bytes_mut::<User>(user_data_bytes.as_mut())
+            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+
+        if platform.administrator != self.administrator.key().as_ref()
+            || user.owner != self.platform_pda.key().as_ref()
+        {
+            return Err(ProgramError::InvalidAccountOwner);
+        }
+
+        // Validate metadata PDA is derived from the mint
+        let metadata_pda_seeds = [b"metadata", self.mint_pda.key().as_ref(), &TOKEN_2022_ID];
+        let (metadata_pda, _) = try_find_program_address(&metadata_pda_seeds, &TOKEN_2022_ID)
+            .ok_or(UniPinoNftErr::PdaErr)?;
+
+        if metadata_pda != self.metadata_pda.key().as_ref() {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        // Close metadata account by transferring lamports to administrator
+        let metadata_lamports = self.metadata_pda.lamports();
+        unsafe {
+            *self.metadata_pda.borrow_mut_lamports_unchecked() = 0;
+            *self.administrator.borrow_mut_lamports_unchecked() = self
+                .administrator
+                .lamports()
+                .checked_add(metadata_lamports)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+        }
+
+        // Zero out the metadata account data
+        self.metadata_pda.try_borrow_mut_data()?.fill(0);
+
+        // Update mint counts
+        platform.total_mints = platform
+            .total_mints
+            .checked_sub(1)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+        user.nft_count = user
+            .nft_count
+            .checked_sub(1)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        log!("burn nft success");
+        Ok(())
+    }
+}
+
+impl<'a> TryFrom<&'a [AccountInfo]> for BurnNft<'a> {
+    type Error = ProgramError;
+
+    fn try_from(accounts: &'a [AccountInfo]) -> Result<Self, Self::Error> {
+        let [
+            administrator,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            _,
+        ] = accounts
+        else {
+            return Err(ProgramError::NotEnoughAccountKeys);
+        };
+
+        Ok(Self {
+            administrator,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
         })
     }
 }
