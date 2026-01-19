@@ -19,7 +19,7 @@ impl ToStr for UniPinoNftErr {
     {
         match self {
             Self::PdaErr => "ERROR: Fail to find a valid PDA",
-            Self::UninitPda => "ERROR: Instruction try to re-init exist PDA",
+            Self::UninitPda => "ERROR: Instruction try to access uninit PDA",
             Self::ReInitPda => "ERROR: Instruction try to re-init exist PDA",
         }
     }

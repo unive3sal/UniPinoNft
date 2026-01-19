@@ -1,5 +1,5 @@
 use alloc::string::ToString;
-use bytemuck::{bytes_of, try_from_bytes, try_from_bytes_mut};
+use bytemuck::{bytes_of, try_from_bytes};
 use pinocchio::ProgramResult;
 use pinocchio::account_info::AccountInfo;
 use pinocchio::instruction::{Seed, Signer};
@@ -29,17 +29,16 @@ impl<'a> CreateUser<'a> {
     pub const DISCRIMINATOR: &'a u8 = &2;
 
     pub fn process(self) -> ProgramResult {
-        if self.administrator.is_signer() {
+        if !self.administrator.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
-        if self.platform_pda.is_owned_by(&ID) || self.platform_pda.lamports() == 0 {
+        if !self.platform_pda.is_owned_by(&ID) || self.platform_pda.lamports() == 0 {
             return Err(UniPinoNftErr::UninitPda.into());
         }
 
         let mut platform_data_bytes = self.platform_pda.try_borrow_mut_data()?;
-        let platform_state = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let platform_state = Platform::try_from_bytes_mut(platform_data_bytes.as_mut())?;
 
         if platform_state.administrator != self.administrator.key().as_ref() {
             return Err(ProgramError::InvalidAccountOwner);
@@ -74,9 +73,12 @@ impl<'a> CreateUser<'a> {
         ];
         let platform_signer = Signer::from(&platform_seeds);
 
+        let user_uuid_str = self.user_uuid.to_string();
         let user_seeds = [
             Seed::from(USER_TOKEN),
+            Seed::from(user_uuid_str.as_bytes()),
             Seed::from(self.platform_pda.key().as_ref()),
+            Seed::from(core::slice::from_ref(&platform_state.bump)),
             Seed::from(core::slice::from_ref(&user_bump)),
         ];
         let user_signer = Signer::from(&user_seeds);

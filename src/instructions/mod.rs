@@ -41,9 +41,7 @@ pub enum UniPinoNftInstruction {
         desc = "account for on-chain platform management"
     )]
     #[account(2, name = "system_program")]
-    UpdatePlatform {
-        args: UpdatePlatformArgs,
-    },
+    UpdatePlatform { args: UpdatePlatformArgs },
 
     #[account(
         0,
@@ -60,9 +58,7 @@ pub enum UniPinoNftInstruction {
     )]
     #[account(2, writable, name = "user wallet PDA")]
     #[account(3, name = "system_program")]
-    CreateUser {
-        user_uuid: u128,
-    },
+    CreateUser { user_uuid: u128 },
     /* TODO
     ActivateUserWallet,
     DeactivateUserWallet,
@@ -83,10 +79,14 @@ pub enum UniPinoNftInstruction {
     #[account(2, writable, name = "user PDA")]
     #[account(3, writable, name = "mint PDA")]
     #[account(4, writable, name = "metadata PDA")]
-    #[account(5, name = "system_program")]
-    MintNft {
-        mint_nft_args: MintNftArgs,
-    },
+    #[account(
+        5,
+        writable,
+        name = "fee_receiver",
+        desc = "account to receive mint fees"
+    )]
+    #[account(6, name = "system_program")]
+    MintNft { mint_nft_args: MintNftArgs },
 
     #[account(
         0,
@@ -105,9 +105,7 @@ pub enum UniPinoNftInstruction {
     #[account(3, writable, name = "mint PDA")]
     #[account(4, writable, name = "metadata PDA")]
     #[account(5, name = "system_program")]
-    UpdateNFTMetadata {
-        nft_meta: NftMeta,
-    },
+    UpdateNFTMetadata { nft_meta: NftMeta },
 
     #[account(
         0,
@@ -127,11 +125,10 @@ pub enum UniPinoNftInstruction {
     #[account(4, writable, name = "metadata PDA")]
     #[account(5, name = "system_program")]
     BurnNFT,
-
+    /* TODO
     TransferNFTInternal,
     WithdrawNFT,
     DepositNFT,
-    /* TODO
     CreateAuction,
     PlaceBid,
     SettleAuction,

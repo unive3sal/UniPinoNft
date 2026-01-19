@@ -1,4 +1,5 @@
-use bytemuck::{bytes_of, try_from_bytes, try_from_bytes_mut};
+use alloc::string::ToString;
+use bytemuck::{bytes_of, try_from_bytes};
 use pinocchio::account_info::AccountInfo;
 use pinocchio::instruction::{Seed, Signer};
 use pinocchio::program_error::ProgramError;
@@ -6,9 +7,12 @@ use pinocchio::sysvars::Sysvar;
 use pinocchio::sysvars::rent::Rent;
 use pinocchio::{ProgramResult, pubkey::try_find_program_address};
 use pinocchio_log::log;
-use pinocchio_system::instructions::CreateAccount;
+use pinocchio_system::instructions::{CreateAccount, Transfer};
 use pinocchio_token_2022::state::Mint;
-use pinocchio_token_2022::{ID as TOKEN_2022_ID, instructions::InitializeMint2};
+use pinocchio_token_2022::{
+    ID as TOKEN_2022_ID,
+    instructions::{CloseAccount, InitializeMint2},
+};
 
 use crate::error::UniPinoNftErr;
 use crate::state::nft_meta::NftMeta;
@@ -23,6 +27,7 @@ pub struct MintNft<'a> {
     pub user_pda: &'a AccountInfo,
     pub mint_pda: &'a AccountInfo,
     pub metadata_pda: &'a AccountInfo,
+    pub fee_receiver: &'a AccountInfo,
     pub mint_nft_args: &'a MintNftArgs,
 }
 
@@ -43,17 +48,32 @@ impl<'a> MintNft<'a> {
         }
 
         let mut platform_data_bytes = self.platform_pda.try_borrow_mut_data()?;
-        let platform = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let platform = Platform::try_from_bytes_mut(platform_data_bytes.as_mut())?;
 
         let mut user_data_bytes = self.user_pda.try_borrow_mut_data()?;
-        let user = try_from_bytes_mut::<User>(user_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let user = User::try_from_bytes_mut(user_data_bytes.as_mut())?;
 
         if platform.administrator != self.administrator.key().as_ref()
             || user.owner != self.platform_pda.key().as_ref()
         {
             return Err(ProgramError::InvalidAccountOwner);
+        }
+
+        // Collect mint fee if configured
+        if platform.mint_fee > 0 {
+            // Validate fee_receiver matches platform configuration
+            if platform.fee_receiver != self.fee_receiver.key().as_ref() {
+                return Err(ProgramError::InvalidAccountOwner);
+            }
+
+            Transfer {
+                from: self.administrator,
+                to: self.fee_receiver,
+                lamports: platform.mint_fee,
+            }
+            .invoke()?;
+
+            log!("collected mint fee: {} lamports", platform.mint_fee);
         }
 
         let mint_pda_seeds = [
@@ -180,6 +200,7 @@ impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for MintNft<'a> {
             user_pda,
             mint_pda,
             metadata_pda,
+            fee_receiver,
             _,
         ] = accounts
         else {
@@ -194,12 +215,13 @@ impl<'a> TryFrom<(&'a [AccountInfo], &'a [u8])> for MintNft<'a> {
             .map_err(|_| ProgramError::InvalidInstructionData)?;
 
         Ok(Self {
-            administrator: administrator,
-            platform_pda: platform_pda,
-            user_pda: user_pda,
-            mint_pda: mint_pda,
-            metadata_pda: metadata_pda,
-            mint_nft_args: mint_nft_args,
+            administrator,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            fee_receiver,
+            mint_nft_args,
         })
     }
 }
@@ -232,12 +254,10 @@ impl<'a> UpdateNFTMetadata<'a> {
         }
 
         let platform_data_bytes = self.platform_pda.try_borrow_data()?;
-        let platform = try_from_bytes::<Platform>(platform_data_bytes.as_ref())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let platform = Platform::try_from_bytes(platform_data_bytes.as_ref())?;
 
         let user_data_bytes = self.user_pda.try_borrow_data()?;
-        let user = try_from_bytes::<User>(user_data_bytes.as_ref())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let user = User::try_from_bytes(user_data_bytes.as_ref())?;
 
         if platform.administrator != self.administrator.key().as_ref()
             || user.owner != self.platform_pda.key().as_ref()
@@ -332,12 +352,10 @@ impl<'a> BurnNft<'a> {
         }
 
         let mut platform_data_bytes = self.platform_pda.try_borrow_mut_data()?;
-        let platform = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let platform = Platform::try_from_bytes_mut(platform_data_bytes.as_mut())?;
 
         let mut user_data_bytes = self.user_pda.try_borrow_mut_data()?;
-        let user = try_from_bytes_mut::<User>(user_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let user = User::try_from_bytes_mut(user_data_bytes.as_mut())?;
 
         if platform.administrator != self.administrator.key().as_ref()
             || user.owner != self.platform_pda.key().as_ref()
@@ -353,6 +371,27 @@ impl<'a> BurnNft<'a> {
         if metadata_pda != self.metadata_pda.key().as_ref() {
             return Err(ProgramError::InvalidSeeds);
         }
+
+        // Close the mint account via Token-2022 CPI
+        // The user_pda is the mint authority, so we need it to sign
+        let user_uuid_val = { user.user_uuid }; // Copy from packed struct
+        let user_uuid_str = user_uuid_val.to_string();
+        let user_seeds = [
+            Seed::from(user::USER_TOKEN),
+            Seed::from(user_uuid_str.as_bytes()),
+            Seed::from(self.platform_pda.key().as_ref()),
+            Seed::from(core::slice::from_ref(&platform.bump)),
+            Seed::from(core::slice::from_ref(&user.bump)),
+        ];
+        let user_signer = Signer::from(&user_seeds);
+
+        CloseAccount {
+            account: self.mint_pda,
+            destination: self.administrator,
+            authority: self.user_pda,
+            token_program: &TOKEN_2022_ID,
+        }
+        .invoke_signed(&[user_signer])?;
 
         // Close metadata account by transferring lamports to administrator
         let metadata_lamports = self.metadata_pda.lamports();

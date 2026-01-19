@@ -1,4 +1,3 @@
-use bytemuck::checked::try_from_bytes_mut;
 use bytemuck::{bytes_of, try_from_bytes};
 use pinocchio::ProgramResult;
 use pinocchio::account_info::AccountInfo;
@@ -107,8 +106,7 @@ impl<'a> UpdatePlatformConfig<'a> {
         }
 
         let mut platform_data_bytes = self.platform_pda.try_borrow_mut_data()?;
-        let platform_state = try_from_bytes_mut::<Platform>(platform_data_bytes.as_mut())
-            .map_err(|_| ProgramError::AccountBorrowFailed)?;
+        let platform_state = Platform::try_from_bytes_mut(platform_data_bytes.as_mut())?;
 
         if platform_state.administrator != self.administrator.key().as_ref() {
             return Err(ProgramError::InvalidAccountOwner);
