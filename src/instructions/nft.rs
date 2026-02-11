@@ -1,11 +1,10 @@
-use bytemuck::try_from_bytes;
 use pinocchio::error::ProgramError;
 use pinocchio::{AccountView, ProgramResult};
 
 use super::*;
 
 pub struct MintNft<'a> {
-    pub administrator: &'a AccountView,
+    pub authority: &'a AccountView,
     pub platform_pda: &'a AccountView,
     pub user_pda: &'a AccountView,
     pub mint_pda: &'a AccountView,
@@ -18,12 +17,31 @@ impl<'a> MintNft<'a> {
     pub const DISCRIMINATOR: &'a u8 = &3;
 
     pub fn process(self) -> ProgramResult {
-        validate_mint_preconditions(self.administrator.is_signer())
+        let Self {
+            authority,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            fee_receiver,
+            mint_nft_args,
+        } = self;
+
+        let _ = (
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            fee_receiver,
+            mint_nft_args,
+        );
+
+        validate_mint_preconditions(authority.is_signer())
     }
 }
 
-fn validate_mint_preconditions(administrator_is_signer: bool) -> ProgramResult {
-    if !administrator_is_signer {
+fn validate_mint_preconditions(authority_is_signer: bool) -> ProgramResult {
+    if !authority_is_signer {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
@@ -36,28 +54,15 @@ impl<'a> TryFrom<(&'a [AccountView], &'a [u8])> for MintNft<'a> {
     fn try_from(value: (&'a [AccountView], &'a [u8])) -> Result<Self, Self::Error> {
         let (accounts, instruction_data) = value;
 
-        let [
-            administrator,
-            platform_pda,
-            user_pda,
-            mint_pda,
-            metadata_pda,
-            fee_receiver,
-            _,
-        ] = accounts
+        let [authority, platform_pda, user_pda, mint_pda, metadata_pda, fee_receiver, _] = accounts
         else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
 
-        if instruction_data.len() != core::mem::size_of::<MintNftArgs>() {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-
-        let mint_nft_args = try_from_bytes::<MintNftArgs>(instruction_data)
-            .map_err(|_| ProgramError::InvalidInstructionData)?;
+        let mint_nft_args = parse_instruction_data::<MintNftArgs>(instruction_data)?;
 
         Ok(Self {
-            administrator,
+            authority,
             platform_pda,
             user_pda,
             mint_pda,
@@ -69,19 +74,35 @@ impl<'a> TryFrom<(&'a [AccountView], &'a [u8])> for MintNft<'a> {
 }
 
 pub struct UpdateNFTMetadata<'a> {
-    pub administrator: &'a AccountView,
+    pub authority: &'a AccountView,
     pub platform_pda: &'a AccountView,
     pub user_pda: &'a AccountView,
     pub mint_pda: &'a AccountView,
     pub metadata_pda: &'a AccountView,
-    pub nft_meta: &'a super::NftMeta,
+    pub nft_meta: &'a super::NftMetaArgs,
 }
 
 impl<'a> UpdateNFTMetadata<'a> {
     pub const DISCRIMINATOR: &'a u8 = &4;
 
     pub fn process(self) -> ProgramResult {
-        let _ = self;
+        let Self {
+            authority,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            nft_meta,
+        } = self;
+        let _ = (
+            authority,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+            nft_meta,
+        );
+
         Err(ProgramError::InvalidInstructionData)
     }
 }
@@ -92,27 +113,14 @@ impl<'a> TryFrom<(&'a [AccountView], &'a [u8])> for UpdateNFTMetadata<'a> {
     fn try_from(value: (&'a [AccountView], &'a [u8])) -> Result<Self, Self::Error> {
         let (accounts, instruction_data) = value;
 
-        let [
-            administrator,
-            platform_pda,
-            user_pda,
-            mint_pda,
-            metadata_pda,
-            _,
-        ] = accounts
-        else {
+        let [authority, platform_pda, user_pda, mint_pda, metadata_pda, _] = accounts else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
 
-        if instruction_data.len() != core::mem::size_of::<super::NftMeta>() {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-
-        let nft_meta = try_from_bytes::<super::NftMeta>(instruction_data)
-            .map_err(|_| ProgramError::InvalidInstructionData)?;
+        let nft_meta = parse_instruction_data::<super::NftMetaArgs>(instruction_data)?;
 
         Ok(Self {
-            administrator,
+            authority,
             platform_pda,
             user_pda,
             mint_pda,
@@ -123,7 +131,7 @@ impl<'a> TryFrom<(&'a [AccountView], &'a [u8])> for UpdateNFTMetadata<'a> {
 }
 
 pub struct BurnNft<'a> {
-    pub administrator: &'a AccountView,
+    pub authority: &'a AccountView,
     pub platform_pda: &'a AccountView,
     pub user_pda: &'a AccountView,
     pub mint_pda: &'a AccountView,
@@ -134,7 +142,15 @@ impl<'a> BurnNft<'a> {
     pub const DISCRIMINATOR: &'a u8 = &5;
 
     pub fn process(self) -> ProgramResult {
-        let _ = self;
+        let Self {
+            authority,
+            platform_pda,
+            user_pda,
+            mint_pda,
+            metadata_pda,
+        } = self;
+        let _ = (authority, platform_pda, user_pda, mint_pda, metadata_pda);
+
         Err(ProgramError::InvalidInstructionData)
     }
 }
@@ -143,20 +159,12 @@ impl<'a> TryFrom<&'a [AccountView]> for BurnNft<'a> {
     type Error = ProgramError;
 
     fn try_from(accounts: &'a [AccountView]) -> Result<Self, Self::Error> {
-        let [
-            administrator,
-            platform_pda,
-            user_pda,
-            mint_pda,
-            metadata_pda,
-            _,
-        ] = accounts
-        else {
+        let [authority, platform_pda, user_pda, mint_pda, metadata_pda, _] = accounts else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
 
         Ok(Self {
-            administrator,
+            authority,
             platform_pda,
             user_pda,
             mint_pda,

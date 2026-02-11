@@ -1,26 +1,26 @@
-use bytemuck::{bytes_of, try_from_bytes};
+use bytemuck::bytes_of;
 use pinocchio::cpi::{Seed, Signer};
 use pinocchio::error::ProgramError;
-use pinocchio::sysvars::{Sysvar, rent::Rent};
+use pinocchio::sysvars::{rent::Rent, Sysvar};
 use pinocchio::{AccountView, ProgramResult};
 use pinocchio_log::log;
 use pinocchio_system::instructions::CreateAccount;
 use solana_address::Address;
 
 use super::*;
-use crate::ID;
 use crate::error::UniPinoNftErr;
 use crate::state::platform::Platform;
+use crate::ID;
 
 pub const PLATFORM_TOKEN: &[u8] = b"administer";
 
 pub struct InitPlatform<'a> {
-    administrator: &'a AccountView,
+    authority: &'a AccountView,
     platform_pda: &'a AccountView,
 }
 
 pub struct UpdatePlatformConfig<'a> {
-    administrator: &'a AccountView,
+    authority: &'a AccountView,
     platform_pda: &'a AccountView,
     update_args: &'a UpdatePlatformArgs,
 }
@@ -29,12 +29,12 @@ impl<'a> InitPlatform<'a> {
     pub const DISCRIMINATOR: &'a u8 = &0;
 
     pub fn process(self) -> ProgramResult {
-        if !self.administrator.is_signer() {
+        if !self.authority.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
         let (pda, bump) = Address::find_program_address(
-            &[PLATFORM_TOKEN, self.administrator.address().as_ref()],
+            &[PLATFORM_TOKEN, self.authority.address().as_ref()],
             &ID,
         );
 
@@ -48,7 +48,7 @@ impl<'a> InitPlatform<'a> {
 
         let signer_seeds = [
             Seed::from(PLATFORM_TOKEN),
-            Seed::from(self.administrator.address().as_ref()),
+            Seed::from(self.authority.address().as_ref()),
             Seed::from(core::slice::from_ref(&bump)),
         ];
         let signer = Signer::from(&signer_seeds);
@@ -56,7 +56,7 @@ impl<'a> InitPlatform<'a> {
         let min_lamports = Rent::get()?.try_minimum_balance(Platform::INIT_SPACE)?;
 
         CreateAccount {
-            from: self.administrator,
+            from: self.authority,
             to: self.platform_pda,
             lamports: min_lamports,
             space: Platform::INIT_SPACE as u64,
@@ -64,7 +64,7 @@ impl<'a> InitPlatform<'a> {
         }
         .invoke_signed(&[signer])?;
 
-        let platform_init_state = Platform::new(*self.administrator.address().as_array(), bump);
+        let platform_init_state = Platform::new(*self.authority.address().as_array(), bump);
         self.platform_pda
             .try_borrow_mut()?
             .copy_from_slice(bytes_of(&platform_init_state));
@@ -78,12 +78,12 @@ impl<'a> TryFrom<&'a [AccountView]> for InitPlatform<'a> {
     type Error = ProgramError;
 
     fn try_from(accounts: &'a [AccountView]) -> Result<Self, Self::Error> {
-        let [administrator, platform_pda, _] = accounts else {
+        let [authority, platform_pda, _] = accounts else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
 
         Ok(Self {
-            administrator,
+            authority,
             platform_pda,
         })
     }
@@ -93,7 +93,7 @@ impl<'a> UpdatePlatformConfig<'a> {
     pub const DISCRIMINATOR: &'a u8 = &1;
 
     pub fn process(self) -> ProgramResult {
-        if !self.administrator.is_signer() {
+        if !self.authority.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
@@ -104,12 +104,12 @@ impl<'a> UpdatePlatformConfig<'a> {
         let mut platform_data = self.platform_pda.try_borrow_mut()?;
         let platform_state = Platform::try_from_bytes_mut(platform_data.as_mut())?;
 
-        if platform_state.administrator != *self.administrator.address().as_array() {
+        if platform_state.authority != *self.authority.address().as_array() {
             return Err(ProgramError::InvalidAccountOwner);
         }
 
         let (pda, bump) = Address::find_program_address(
-            &[PLATFORM_TOKEN, self.administrator.address().as_ref()],
+            &[PLATFORM_TOKEN, self.authority.address().as_ref()],
             &ID,
         );
         if pda != *self.platform_pda.address() || bump != platform_state.bump {
@@ -132,19 +132,14 @@ impl<'a> TryFrom<(&'a [AccountView], &'a [u8])> for UpdatePlatformConfig<'a> {
     fn try_from(value: (&'a [AccountView], &'a [u8])) -> Result<Self, Self::Error> {
         let (accounts, instruction_data) = value;
 
-        let [administrator, platform_pda, _] = accounts else {
+        let [authority, platform_pda, _] = accounts else {
             return Err(ProgramError::NotEnoughAccountKeys);
         };
 
-        if instruction_data.len() != core::mem::size_of::<UpdatePlatformArgs>() {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-
-        let update_platform_args = try_from_bytes::<UpdatePlatformArgs>(instruction_data)
-            .map_err(|_| ProgramError::InvalidInstructionData)?;
+        let update_platform_args = parse_instruction_data::<UpdatePlatformArgs>(instruction_data)?;
 
         Ok(Self {
-            administrator,
+            authority,
             platform_pda,
             update_args: update_platform_args,
         })

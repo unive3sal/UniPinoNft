@@ -1,19 +1,16 @@
 #![no_std]
 #![allow(non_snake_case)]
+#![allow(unexpected_cfgs)]
 
 extern crate alloc;
 
 mod error;
 mod instructions;
-mod state {
-    pub mod nft_meta;
-    pub mod platform;
-    pub mod user;
-}
+mod state;
 
 use pinocchio::error::ProgramError;
 use pinocchio::{
-    Address, ProgramResult, default_allocator, nostd_panic_handler, program_entrypoint,
+    default_allocator, nostd_panic_handler, program_entrypoint, Address, ProgramResult,
 };
 use solana_address::declare_id;
 
