@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable, try_from_bytes, try_from_bytes_mut};
-use pinocchio::program_error::ProgramError;
+use pinocchio::error::ProgramError;
 
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable)]

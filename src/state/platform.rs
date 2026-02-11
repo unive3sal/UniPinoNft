@@ -1,13 +1,12 @@
 use bytemuck::{Pod, Zeroable, try_from_bytes, try_from_bytes_mut};
-use pinocchio::program_error::ProgramError;
-use pinocchio::pubkey::Pubkey;
+use pinocchio::error::ProgramError;
 
 #[repr(C, packed)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Platform {
     pub discriminator: [u8; 8],
-    pub administrator: Pubkey, // this PDA should also be owned by authority
-    pub fee_receiver: Pubkey,
+    pub administrator: [u8; 32],
+    pub fee_receiver: [u8; 32],
     pub total_users: u64,
     pub total_mints: u64,
     pub mint_fee: u64,
@@ -19,7 +18,7 @@ impl Platform {
     pub const DISCRIMINATOR: [u8; 8] = *b"platform";
     pub const INIT_SPACE: usize = core::mem::size_of::<Self>();
 
-    pub fn new(authority: Pubkey, bump: u8) -> Self {
+    pub fn new(authority: [u8; 32], bump: u8) -> Self {
         Self {
             discriminator: Self::DISCRIMINATOR,
             administrator: authority,

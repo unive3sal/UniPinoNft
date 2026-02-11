@@ -3,12 +3,9 @@ pub mod platform;
 pub mod user;
 
 use bytemuck::{Pod, Zeroable};
-use pinocchio::pubkey::Pubkey;
-use pinocchio_pubkey::declare_id;
+
+/*
 use shank::ShankInstruction;
-
-declare_id!("6jpuWYTM3ARc5CHrMBtR1c7gyjkMTsJoYT7PqqhMpRWh");
-
 #[allow(dead_code)]
 #[derive(ShankInstruction)]
 pub enum UniPinoNftInstruction {
@@ -134,13 +131,14 @@ pub enum UniPinoNftInstruction {
     SettleAuction,
     */
 }
+*/
 
 #[repr(C, packed)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct UpdatePlatformArgs {
     pub mint_fee: u64,
     pub is_receiver_valid: u8,
-    pub fee_receiver: Pubkey,
+    pub fee_receiver: [u8; 32],
 }
 
 #[repr(C, packed)]
